@@ -8,14 +8,26 @@ This repository serves as an experimental workspace for working with different L
 
 ## Setup
 
-1. Copy the environment template to create your local configuration:
+1. Install dependencies using [uv](https://github.com/astral-sh/uv):
+   ```bash
+   # Install uv if you haven't already
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # Install project dependencies
+   uv sync
+
+   # Or install with dev dependencies (includes Jupyter)
+   uv sync --all-extras
+   ```
+
+2. Copy the environment template to create your local configuration:
    ```bash
    cp .env.template .env
    ```
 
-2. Edit [.env](.env) and add your API keys and configuration values
+3. Edit [.env](.env) and add your API keys and configuration values
 
-3. Source the environment variables:
+4. Source the environment variables:
    ```bash
    source .env
    ```

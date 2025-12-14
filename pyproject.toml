@@ -1,0 +1,24 @@
+[project]
+name = "llm-playground"
+version = "0.1.0"
+description = "A flexible playground for experimenting with multiple Large Language Models"
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=1.55.0",
+    "pydantic>=2.12.0",
+    "pillow>=12.0.0",
+    "pdf2image>=1.17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyter>=1.1.0",
+    "ipykernel>=7.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=80.9"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
