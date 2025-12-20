@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-worker
+  template:
+    metadata:
+      labels:
+        app: image-worker
+    spec:
+      containers:
+      - name: worker
+        image: my-image-worker:v1
+        imagePullPolicy: Never  # <--- IMPORTANT: Tells K8s "Don't look online, use the local image we just built"
+        command: ["/bin/sh", "-c"]
+        args: ["python /app/worker.py"]
+
+        resources:
+          requests:
+            memory: "128Mi"  # Minimum RAM needed to start
+            cpu: "250m"      # 250 millicores (1/4 of a CPU core)
+          limits:
+            memory: "512Mi"  # Kill the pod if it exceeds this
+            cpu: "500m"      # Throttles the pod if it tries to use more than 1/2 core
+        
+        # --- CONFIGURATION ---
+        envFrom:
+        - configMapRef:
+            name: app-config
+        env:
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: db-password

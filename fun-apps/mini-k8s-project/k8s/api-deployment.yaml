@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-api
+  template:
+    metadata:
+      labels:
+        app: image-api
+    spec:
+      containers:
+      - name: api-server
+        image: my-image-worker:v1
+        imagePullPolicy: Never
+        # 👈 This is the override! Run api.py instead of worker.py
+        command: ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+        
+        ports:
+        - containerPort: 8000
+
+        envFrom:
+        - configMapRef:
+            name: app-config
+        env:
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: db-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: image-api-service
+spec:
+  type: NodePort  # 👈 Allows external access for testing
+  selector:
+    app: image-api
+  ports:
+    - port: 80
+      targetPort: 8000 # Map port 80 (external) to 8000 (container)
