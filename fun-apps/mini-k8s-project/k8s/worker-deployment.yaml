@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: image-worker
 spec:
-  replicas: 1
+  replicas: 3  # Scale horizontally for parallel job processing
   selector:
     matchLabels:
       app: image-worker
@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: worker
-        image: my-image-worker:v1
+        image: my-image-worker:v2
         imagePullPolicy: Never  # <--- IMPORTANT: Tells K8s "Don't look online, use the local image we just built"
         command: ["/bin/sh", "-c"]
         args: ["python /app/worker.py"]

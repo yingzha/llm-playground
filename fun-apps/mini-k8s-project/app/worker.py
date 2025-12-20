@@ -3,6 +3,7 @@ import os
 import time
 import redis
 import psycopg2
+import socket
 
 # --- CONFIGURATION ---
 # We read these from Kubernetes Environment Variables
@@ -10,6 +11,7 @@ REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PASS = os.getenv('DB_PASS', 'mysecretpassword')
 DB_NAME = "job_db"
+WORKER_NAME = socket.gethostname()  # Gets the pod name in Kubernetes
 
 # --- CONNECT TO DATABASE ---
 def get_db_connection():
@@ -49,14 +51,14 @@ print("✅ Table 'jobs' is ready.")
 
 # --- THE WORKER LOOP ---
 def run_worker():
-    print("👷 Worker started. Waiting for jobs in 'image_queue'...")
+    print(f"👷 [{WORKER_NAME}] Worker started. Waiting for jobs in 'image_queue'...")
     while True:
         # 1. BLOCK here until Redis gives us a job ID (0 means wait forever)
         # brpop returns a tuple: (queue_name, data)
         queue, job_id_bytes = r.brpop("image_queue", timeout=0)
         job_id = int(job_id_bytes)
 
-        print(f"📥 Received Job ID: {job_id}")
+        print(f"📥 [{WORKER_NAME}] Received Job ID: {job_id}")
 
         # 2. Update DB: Set to PROCESSING
         with conn.cursor() as cur:
@@ -64,18 +66,18 @@ def run_worker():
             conn.commit()
 
         # 3. Simulate heavy work (AI processing)
-        time.sleep(5) 
+        time.sleep(5)
         fake_result_url = f"processed_image_{job_id}.jpg"
 
         # 4. Update DB: Set to COMPLETED
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE jobs SET status = 'COMPLETED', result = %s WHERE id = %s", 
+                "UPDATE jobs SET status = 'COMPLETED', result = %s WHERE id = %s",
                 (fake_result_url, job_id)
             )
             conn.commit()
-        
-        print(f"✨ Job {job_id} Finished!")
+
+        print(f"✨ [{WORKER_NAME}] Job {job_id} Finished!")
 
 if __name__ == "__main__":
     run_worker()
