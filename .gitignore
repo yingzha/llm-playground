@@ -235,3 +235,7 @@ dist-ssr
 
 # Kubernetes secrets - DO NOT COMMIT
 fun-apps/mini-k8s-project/k8s/secrets.yaml
+
+# TLS certificates (self-signed, regenerate as needed)
+fun-apps/mini-k8s-project/tls.crt
+fun-apps/mini-k8s-project/tls.key

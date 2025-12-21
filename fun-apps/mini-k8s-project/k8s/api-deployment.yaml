@@ -37,9 +37,9 @@ kind: Service
 metadata:
   name: image-api-service
 spec:
-  type: NodePort  # 👈 Allows external access for testing
+  type: ClusterIP  # Internal only - Ingress handles external access
   selector:
     app: image-api
   ports:
     - port: 80
-      targetPort: 8000 # Map port 80 (external) to 8000 (container)
+      targetPort: 8000 # Map port 80 (service) to 8000 (container)
