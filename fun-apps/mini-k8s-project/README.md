@@ -26,6 +26,7 @@ minikube image load my-image-worker:v3
 minikube addons enable ingress
 
 # 3. Deploy everything
+kubectl apply -f k8s/resource-quota.yaml  # Set resource limits
 kubectl apply -f k8s/secrets.yaml
 kubectl apply -f k8s/postgres.yaml
 kubectl apply -f k8s/redis.yaml
@@ -60,8 +61,12 @@ kubectl logs -f -l app=image-worker
 # View all pods
 kubectl get pods
 
-# Scale workers
-kubectl scale deployment image-worker --replicas=3
+# Scale workers (limited by ResourceQuota)
+kubectl scale deployment image-worker --replicas=5
+
+# Check resource usage
+kubectl describe quota mini-k8s-quota
+kubectl top pods
 
 # View logs
 kubectl logs -l app=image-worker -f
@@ -87,10 +92,11 @@ Credentials are in [k8s/secrets.yaml](k8s/secrets.yaml):
 │   ├── worker.py       # Job processor with resilience
 │   └── Dockerfile      # Container image
 └── k8s/
-    ├── secrets.yaml    # Secrets & ConfigMap
-    ├── ingress.yaml    # HTTPS Ingress
-    ├── postgres.yaml   # Database
-    ├── redis.yaml      # Queue
+    ├── resource-quota.yaml    # Resource limits (prevents runaway scaling)
+    ├── secrets.yaml           # Secrets & ConfigMap
+    ├── ingress.yaml           # HTTPS Ingress
+    ├── postgres.yaml          # Database
+    ├── redis.yaml             # Queue
     ├── api-deployment.yaml    # API deployment (ClusterIP)
     └── worker-deployment.yaml # Worker deployment (3 replicas)
 ```
@@ -99,6 +105,7 @@ Credentials are in [k8s/secrets.yaml](k8s/secrets.yaml):
 
 ✅ **HTTPS with Ingress** - Production-standard TLS termination
 ✅ **Horizontal Scaling** - 3 worker replicas for parallel processing
+✅ **Resource Quotas** - Prevents accidental runaway scaling (max 15 pods, 2 CPU cores)
 ✅ **Fault Tolerance** - Workers auto-reconnect to Redis/PostgreSQL
 ✅ **Job Recovery** - Orphaned jobs automatically requeued every 30s
 ✅ **Secrets Management** - Kubernetes Secrets for credentials
@@ -122,3 +129,8 @@ Credentials are in [k8s/secrets.yaml](k8s/secrets.yaml):
 **Redis/DB connection issues?**
 - Workers will auto-reconnect - check logs for "Reconnected" messages
 - Kubernetes automatically restarts failed pods
+
+**Can't scale beyond a certain number of workers?**
+- Check quota: `kubectl describe quota mini-k8s-quota`
+- ResourceQuota limits: 15 pods max, 2 CPU cores total
+- Events will show: "exceeded quota" if you hit limits

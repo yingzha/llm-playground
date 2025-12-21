@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mini-k8s-quota
+  namespace: default
+spec:
+  hard:
+    # CPU and Memory limits
+    requests.cpu: "2"           # Total 2 CPU cores across all pods
+    requests.memory: 2Gi        # Total 2GB RAM across all pods
+    limits.cpu: "4"             # Total 4 CPU cores max
+    limits.memory: 4Gi          # Total 4GB RAM max
+
+    # Pod count limit
+    pods: "15"                  # Max 15 pods total (prevents scaling to 100+)
+
+    # Service limits
+    services: "10"              # Max 10 services
+
+    # Persistent volume claims
+    persistentvolumeclaims: "5" # Max 5 PVCs
