@@ -1,0 +1,8 @@
+Given the conversation below, generate a single standalone search query to look up
+information relevant to answering the latest user question. Resolve pronouns and
+references using the chat history. Only respond with the query, nothing else.
+
+Conversation:
+{history}
+
+Latest question: {question}

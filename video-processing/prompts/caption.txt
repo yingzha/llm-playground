@@ -1,0 +1,5 @@
+Write a concise, clear, dense caption for this segment of a video. Describe all
+visible people, objects, actions, scene/setting, on-screen text, and any notable
+events or changes. Be specific and factual; do not speculate about things not
+visible. Start and end each sentence with an approximate timestamp in seconds
+relative to the start of the segment, e.g. "[0.0s-2.5s] ...".

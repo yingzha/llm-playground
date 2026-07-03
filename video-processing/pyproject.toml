@@ -1,0 +1,38 @@
+[project]
+name = "video-processing"
+version = "0.1.0"
+description = "VSS-inspired video summarization + multi-turn Q&A — Gemini inference, local preprocessing, per-stage profiling"
+requires-python = ">=3.10"
+dependencies = [
+    # --- core ---
+    "google-genai>=1.55.0",   # Gemini VLM + LLM + embeddings
+    "pydantic>=2.10",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "python-dotenv>=1.0",
+    "rich>=13.0",             # profile tables
+    # --- video decode (CPU) ---
+    "av>=12.0",               # PyAV: precise seek/decode, bundles ffmpeg
+    "opencv-python>=4.9",     # fallback decode + Laplacian sharpness
+    # --- frame selection ---
+    "scenedetect>=0.6.4",     # AdaptiveDetector / ContentDetector (scene sampling)
+    "imagehash>=4.3",         # perceptual-hash near-duplicate dedup
+    # --- retrieval (Arm B Q&A) ---
+    "faiss-cpu>=1.8",         # optional; numpy brute-force fallback if import fails
+]
+
+# This is an application, not a library — uv manages the env without building/installing it.
+[tool.uv]
+package = false
+
+# =====================================================================
+# Phase-2 GPU extras (RTX 5090 / Blackwell sm_120) are NOT declared here,
+# because torch's cu128 wheels live on a custom index and have no macOS
+# build (they would break `uv sync` on the Mac). Install them ONLY on the
+# 5090 box, into this project's venv:
+#
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+#   uv pip install torchcodec transnetv2-pytorch
+#
+# Needed only for `--decoder gpu` and `--sampling transnet`. See README.
+# =====================================================================
