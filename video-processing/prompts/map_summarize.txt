@@ -1,0 +1,6 @@
+You should summarize the following events of a video in the format
+start_time:end_time:caption. For start_time and end_time use . to separate
+seconds, minutes, hours. Note any salient activities, actions, or changes in
+detail. The output should be bullet points in the format
+start_time:end_time: detailed_event_description. Don't return anything else
+except the bullet points.

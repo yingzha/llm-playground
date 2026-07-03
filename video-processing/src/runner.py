@@ -1,0 +1,62 @@
+"""Shared run helpers used by the CLI and the benchmark harness."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+from .config import PipelineConfig
+from .profiling import ProfileReport
+from .gemini import make_client
+from .pipeline_native import NativePipeline
+from .pipeline_local import LocalPipeline
+
+
+def _stamp() -> str:
+    return time.strftime("%Y%m%d-%H%M%S")
+
+
+def _save_profile(cfg: PipelineConfig, report: ProfileReport, task: str) -> Path:
+    stem = Path(cfg.video).stem
+    path = cfg.out / "profiles" / f"{stem}__{cfg.arm}_{task}__{_stamp()}.json"
+    report.save_json(path)
+    return path
+
+
+def run_summarize(cfg: PipelineConfig):
+    report = ProfileReport(label=f"summarize · {cfg.arm} · {Path(cfg.video).name}")
+    report.counter("arm", cfg.arm)
+    report.counter("engine", cfg.engine)
+    report.counter("vlm_model", cfg.vlm_model)
+    client = make_client(cfg.engine)
+    with report.stage("total"):
+        if cfg.arm == "native":
+            summary = NativePipeline(client, cfg).summarize(report)
+        else:
+            summary = LocalPipeline(client, cfg).summarize(report)
+    profile_path = _save_profile(cfg, report, "summarize")
+    return summary, report, profile_path
+
+
+def run_qa_batch(cfg: PipelineConfig, questions: list[str]):
+    report = ProfileReport(label=f"qa · {cfg.arm} · {Path(cfg.video).name}")
+    report.counter("arm", cfg.arm)
+    report.counter("engine", cfg.engine)
+    client = make_client(cfg.engine)
+    qas: list[tuple[str, str]] = []
+    with report.stage("total"):
+        if cfg.arm == "native":
+            pipe = NativePipeline(client, cfg)
+            pipe.prepare(report)
+            history: list[tuple[str, str]] = []
+            for q in questions:
+                a = pipe.answer(q, history, report)
+                history.append((q, a))
+                qas.append((q, a))
+        else:
+            engine = LocalPipeline(client, cfg).qa_engine(report)
+            for q in questions:
+                a = engine.answer(q, report)
+                qas.append((q, a))
+    profile_path = _save_profile(cfg, report, "qa")
+    return qas, report, profile_path
