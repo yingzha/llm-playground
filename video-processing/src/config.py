@@ -53,6 +53,7 @@ class PipelineConfig:
     max_frames_per_chunk: int = 20 # cap for scene/keyframe selection
     scene_threshold: float = 3.0   # PySceneDetect AdaptiveDetector adaptive_threshold
     detect_downscale: int = 2      # downscale factor for scene detection (speed)
+    transnet_threshold: float = 0.5  # TransNetV2 shot-transition probability cutoff
     dedup: bool = True             # phash near-duplicate dedup
     dedup_hamming: int = 10        # max Hamming distance to treat frames as duplicates
     jpeg_max_side: int = 768       # resize longest side before sending to Gemini
@@ -86,8 +87,8 @@ class PipelineConfig:
             for k in (
                 "arm", "engine", "decoder", "sampling", "vlm_model", "embed_model",
                 "chunk_duration", "chunk_overlap", "frames_per_chunk",
-                "max_frames_per_chunk", "scene_threshold", "dedup", "dedup_hamming",
-                "jpeg_max_side",
+                "max_frames_per_chunk", "scene_threshold", "transnet_threshold",
+                "dedup", "dedup_hamming", "jpeg_max_side",
             )
         }
         blob = video_hash + repr(sorted(relevant.items()))

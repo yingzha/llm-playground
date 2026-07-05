@@ -26,13 +26,18 @@ dependencies = [
 package = false
 
 # =====================================================================
-# Phase-2 GPU extras (RTX 5090 / Blackwell sm_120) are NOT declared here,
-# because torch's cu128 wheels live on a custom index and have no macOS
-# build (they would break `uv sync` on the Mac). Install them ONLY on the
-# 5090 box, into this project's venv:
+# GPU deps (RTX 5090 / Blackwell sm_120) are deliberately NOT declared here
+# (also not as an optional extra): torch's CUDA wheels live on a custom
+# index with no macOS build — declaring them would break `uv sync` on the
+# Mac. Install them manually on the 5090 box, into this project's venv:
 #
-#   uv pip install torch --index-url https://download.pytorch.org/whl/cu128
-#   uv pip install torchcodec transnetv2-pytorch
+#   uv pip install torch torchcodec --index-url https://download.pytorch.org/whl/cu130
+#   uv pip install transnetv2-pytorch
 #
-# Needed only for `--decoder gpu` and `--sampling transnet`. See README.
+# torchcodec must be >= 0.14 (cu130): the cu128-era 0.11 + nvidia-npp-cu12
+# stack SILENTLY returns garbage frames from device="cuda". An NVDEC-enabled
+# FFmpeg must be staged in .venv/lib/ffmpeg/ (Ubuntu's system build lacks
+# NVDEC) — see README "GPU" section. Needed only for `--decoder gpu` /
+# `--sampling transnet`. GOTCHA: a plain `uv sync` PRUNES these wheels —
+# re-install after any sync, or use `uv sync --inexact`. (`uv run` is safe.)
 # =====================================================================
