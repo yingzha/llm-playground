@@ -2,10 +2,10 @@
 
 VSS-inspired **video summarization + multi-turn Q&A**, sized for one machine.
 All model inference is a **Gemini** call; **video decode + frame selection run
-locally** (CPU today; GPU/NVDEC on the RTX 5090 is a *planned* Phase-2 path, not
-yet implemented — see below). Every run prints a **per-stage timing/cost
-profile**, and a **benchmark** command compares approaches across video
-sizes/lengths.
+locally** — on CPU anywhere, or on the RTX 5090 (**NVDEC decode + TransNetV2
+shot detection**, see the GPU section). Every run prints a **per-stage
+timing/cost profile**, and a **benchmark** command compares approaches across
+video sizes/lengths.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how this maps to NVIDIA's VSS blueprint.
 
@@ -56,11 +56,13 @@ uv run python vss.py benchmark --videos "outputs/*.mp4" --arms native,local \
 `--arm {native,local}` · `--engine {gemini,mock}` · `--decoder {cpu,gpu}` ·
 `--sampling {uniform,iframe,scene,transnet}` · `--chunk-duration` ·
 `--frames-per-chunk` · `--max-frames-per-chunk` · `--scene-threshold` ·
-`--no-dedup` / `--dedup-hamming` · `--top-k` · `--gemini-model <id>` ·
-`--no-cache` · `--output-dir`.
+`--transnet-threshold` · `--no-dedup` / `--dedup-hamming` · `--top-k` ·
+`--gemini-model <id>` · `--no-cache` · `--output-dir`.
 
-> `--decoder gpu` and `--sampling transnet` are Phase-2 placeholders and currently
-> raise `NotImplementedError` (see the GPU section). Use `cpu` + `scene`/`iframe`/`uniform`.
+> Valid (decoder, sampling) combos — **cpu:** `uniform` / `iframe` / `scene` ·
+> **gpu:** `uniform` / `transnet`. Anything else raises a `ValueError`:
+> `transnet` needs the GPU (dense every-frame decode + CUDA TransNetV2), while
+> `iframe`/`scene` are bound to CPU libraries (PyAV / PySceneDetect).
 
 ---
 
@@ -92,27 +94,63 @@ tokens, and estimated cost. **Verify the pricing table in `src/config.py`
 
 ---
 
-## GPU (RTX 5090 / Blackwell sm_120) — Phase 2 (NOT yet implemented)
+## GPU (RTX 5090 / Blackwell sm_120)
 
-**Current state:** everything runs on **CPU decode**. The GPU paths are
-*scaffolded only* — the `--decoder gpu` flag, the `transnet` sampler choice, and
-`gpu_check.py` exist, but **`--decoder gpu` and `--sampling transnet` currently
-raise a clear `NotImplementedError`**. They are the first task to build (and
-validate) when the 5090 is available.
+Two GPU paths, both via **torchcodec NVDEC** (frames decode straight to CUDA
+tensors):
 
-**Intended Phase-2 design:** decode on **NVDEC** (torchcodec / PyNvVideoCodec,
-frames stay as CUDA tensors) → cheap **GPU histogram gate** → **TransNetV2** shot
-cuts on 48×27 frames → **nvJPEG** encode — keeping frames on-GPU until the final
-JPEGs. Planned setup on the 5090:
+- `--decoder gpu --sampling uniform` — NVDEC decode with the same timestamp
+  math as the CPU path. With identical sampling, `benchmark --decoders cpu,gpu`
+  isolates pure decode speedup.
+- `--decoder gpu --sampling transnet` — the full GPU pipeline: **NVDEC dense
+  decode** → 48×27 GPU resize → **TransNetV2** per-frame shot-transition
+  probabilities (windows of 100 frames, 25-frame overlap, cut at
+  `--transnet-threshold`, default 0.5) → sharpest-of-3 candidates per shot via
+  **GPU Laplacian variance** → CPU JPEG.
+
+Design notes: the originally sketched *histogram gate* was dropped (TransNetV2
+on 48×27 frames is negligible next to decode, which is paid either way), and
+JPEG encode deliberately **stays on CPU** — only ~1 frame per shot survives
+selection, and keeping dedup+encode identical across decoders makes the
+cpu-vs-gpu `decode` profile rows directly comparable. GPU runs populate the
+`gpu_ms` / `vram_gb` profile columns.
+
+Setup on the 5090 box (after `uv sync`):
 
 ```bash
-uv pip install torch --index-url https://download.pytorch.org/whl/cu128   # sm_120 needs cu128 (cu124 → "no kernel image")
-uv pip install torchcodec transnetv2-pytorch
-uv run python gpu_check.py                 # expect capability (12, 0), NVDEC + TransNetV2 OK
-# then implement the NVDEC decode + transnet selection in src/frames.py
+uv pip install torch torchcodec --index-url https://download.pytorch.org/whl/cu130  # matched pair; driver >= 580
+uv pip install transnetv2-pytorch
+uv run python gpu_check.py outputs/test.mp4  # capability (12,0), real NVDEC decode, TransNetV2 forward
 ```
 
-Until then use `--decoder cpu` with `--sampling scene` / `iframe` / `uniform`.
+Use **torchcodec >= 0.14 (cu130)**. The older cu128 pairing (torchcodec 0.11 +
+`nvidia-npp-cu12`) *silently returns garbage frames* (constant solid color) from
+`device="cuda"` on this setup — pipeline runs, shot detection finds nothing.
+`gpu_check.py`'s NVDEC content test exists precisely to catch this.
+
+torchcodec also dlopens **FFmpeg shared libs** (versions 4–8) and uses FFmpeg's
+CUDA hwaccel for NVDEC. **Ubuntu 24.04's system FFmpeg is built *without*
+NVDEC/CUDA support** (no `--enable-nvdec` — `apt install ffmpeg` does not help),
+which also yields garbage GPU frames. Fix without sudo: stage an NVDEC-enabled
+shared build (e.g. [BtbN's](https://github.com/BtbN/FFmpeg-Builds/releases)
+`linux64-gpl-shared`) into `.venv/lib/ffmpeg/`:
+
+```bash
+curl -sL -o ff.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl-shared-7.1.tar.xz
+mkdir -p ffx .venv/lib/ffmpeg && tar -xf ff.tar.xz -C ffx --strip-components=1
+cp -a ffx/lib/*.so* .venv/lib/ffmpeg/ && rm -rf ffx ff.tar.xz
+```
+
+`_preload_gpu_libs()` in `src/frames.py` preloads that directory (plus NPP from
+a pip wheel, if present, for older torchcodec) automatically at `--decoder gpu`
+startup — no `LD_LIBRARY_PATH` needed.
+
+> **Gotchas:** (1) a plain `uv sync` *removes* these manually-installed wheels —
+> re-install after any sync, or use `uv sync --inexact` (`uv run` alone is safe;
+> the staged `.venv/lib/ffmpeg/` survives either way). (2) Generate test clips
+> with `--codec h264` (`make_test_video.py --codec h264`) — H.264 is the
+> safest NVDEC codec (mp4v also worked on the cu130 stack, but is unverified
+> elsewhere).
 
 ---
 
@@ -128,5 +166,16 @@ Smoke-tested on macOS (CPU) against a synthetic clip:
   frames vs `uniform`'s ~16–33 — a large token-cost difference the profile makes
   visible.
 
-**Not yet implemented** (Phase 2, to build on the 5090): `--decoder gpu` and
-`--sampling transnet` — both currently raise a clear `NotImplementedError`.
+GPU paths validated on the RTX 5090 (Ubuntu 24.04, driver 595.71, torch
+2.12.1+cu130 + torchcodec 0.14.0+cu130 + transnetv2-pytorch 1.0.5, BtbN FFmpeg
+7.1 staged in `.venv/lib/ffmpeg/`), mock engine, synthetic clips:
+
+- **`gpu`+`transnet`** finds exactly the right shot count (6/6 and 8/8 scene
+  cuts on 60s/180s clips), one sharp frame per shot; `decode` rows report
+  `gpu_ms` + `vram_gb` (e.g. 2.69 s / 3.6 GB for a dense 4500-frame 720p decode
+  + TransNetV2 — faster than CPU PySceneDetect's 3.22 s on the same clip).
+- **`gpu`+`uniform`** matches CPU selection; GPU decode wins once clips get
+  long/large (720p 3 min: 2.43 s vs 2.90 s total) and loses on tiny SD clips
+  (NVDEC init + sparse-seek overhead dominates).
+- Invalid combos (`gpu`+`scene`, `cpu`+`transnet`) fail fast with clear errors;
+  mp4v decoded correctly on NVDEC with the cu130 stack.

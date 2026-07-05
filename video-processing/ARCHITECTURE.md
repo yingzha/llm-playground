@@ -4,8 +4,8 @@ This folder re-implements the *useful core* of NVIDIA's
 [Video Search & Summarization (VSS) blueprint](https://github.com/NVIDIA-AI-Blueprints/video-search-and-summarization)
 as a lean, single-machine, **profiled** pipeline. All model inference is a
 **Gemini API** call; the only heavy local work is **video decode + frame
-selection**, which runs on CPU today (GPU/NVDEC acceleration on the RTX 5090 is a
-planned Phase-2 path, **not yet implemented**).
+selection**, which runs on CPU anywhere, or on the RTX 5090 with NVDEC decode
+(torchcodec) and TransNetV2 shot detection (`--decoder gpu`).
 
 This doc is both the **study** (how VSS works, stage by stage, mapped to real
 source files) and the **build spec** (what each stage became here).
@@ -61,7 +61,7 @@ directly for summary and Q&A.)
 
 | # | Stage | NVIDIA source (studied) | Our replacement |
 |---|-------|-------------------------|-----------------|
-| 1 | Decode | `services/rtvi/rt-embed/.../video_file_frame_getter.py` (GStreamer + DeepStream/NVDEC) | `src/frames.py` — CPU: OpenCV/PyAV (implemented). GPU/NVDEC via torchcodec = Phase 2, **not yet implemented** |
+| 1 | Decode | `services/rtvi/rt-embed/.../video_file_frame_getter.py` (GStreamer + DeepStream/NVDEC) | `src/frames.py` — CPU: OpenCV/PyAV · GPU: NVDEC via torchcodec (`--decoder gpu`, uniform/transnet) |
 | 2 | Chunk | `chunk_duration`/`chunk_overlap` in `deploy/.../config.yml` | `frames.chunk_ranges()` — same knobs, defaults `chunk_duration=10`, `overlap=0` |
 | 3 | Frame select | `DefaultFrameSelector` — "N equally spaced frames per chunk" (**uniform only**) | `src/frames.py` `FrameExtractor` — `uniform` (parity) **+ new** `iframe`, `scene`, `transnet` + phash dedup |
 | 4 | VLM caption | `tools/video_understanding.py` (OpenAI multi-image request) + `via_stream_handler._create_vlm_prompt` | `pipeline_local.py` → `gemini.py` — Gemini multi-image call; prompt `prompts/caption.txt` |
@@ -115,7 +115,7 @@ decoding fewer frames — not a fancier algorithm.
 | `uniform` | 1 (CPU) | N equally-spaced frames/chunk | NVIDIA-parity baseline |
 | `iframe` | 1 (CPU) | PyAV `skip_frame=NONKEY` (I-frames only) | cheapest; encoder-driven |
 | `scene` | 1 (CPU) | PySceneDetect `AdaptiveDetector`, downscaled → sharpest frame per shot | **default**; best quality/cost |
-| `transnet` | 2 (GPU) | NVDEC → GPU histogram gate → TransNetV2 shot cuts → nvJPEG | **Phase 2 — not yet implemented** (stub raises `NotImplementedError`) |
+| `transnet` | 2 (GPU) | NVDEC dense decode → 48×27 GPU resize → TransNetV2 shot cuts → sharpest-of-3 per shot (GPU Laplacian) → CPU JPEG | requires `--decoder gpu`; cut threshold = `--transnet-threshold`. (Sketched histogram gate + nvJPEG dropped: decode dominates, and CPU JPEG keeps decoders comparable) |
 
 All strategies feed an optional **phash dedup** post-filter
 (`imagehash.phash`, Hamming ≤ `dedup_hamming`) to drop near-duplicate frames.

@@ -44,6 +44,7 @@ def _add_common(p: argparse.ArgumentParser):
     p.add_argument("--frames-per-chunk", type=int, default=10)
     p.add_argument("--max-frames-per-chunk", type=int, default=20)
     p.add_argument("--scene-threshold", type=float, default=3.0)
+    p.add_argument("--transnet-threshold", type=float, default=0.5)
     p.add_argument("--no-dedup", action="store_true")
     p.add_argument("--dedup-hamming", type=int, default=10)
     p.add_argument("--top-k", type=int, default=5)
@@ -58,7 +59,8 @@ def _cfg_from_args(a) -> PipelineConfig:
         arm=a.arm, engine=a.engine, decoder=a.decoder, sampling=a.sampling,
         chunk_duration=a.chunk_duration, chunk_overlap=a.chunk_overlap,
         frames_per_chunk=a.frames_per_chunk, max_frames_per_chunk=a.max_frames_per_chunk,
-        scene_threshold=a.scene_threshold, dedup=not a.no_dedup,
+        scene_threshold=a.scene_threshold, transnet_threshold=a.transnet_threshold,
+        dedup=not a.no_dedup,
         dedup_hamming=a.dedup_hamming, top_k=a.top_k,
         no_cache=a.no_cache, output_dir=a.output_dir,
     )
