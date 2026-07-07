@@ -13,7 +13,7 @@ import traceback
 from pathlib import Path
 
 from .config import PipelineConfig
-from .runner import run_summarize, run_qa_batch
+from .runner import run_decode, run_summarize, run_qa_batch
 
 
 def _coerce(v: str):
@@ -89,12 +89,16 @@ def run_benchmark(a):
                     label = f"{Path(video).name} | {arm} | {dec} | " + \
                             ", ".join(f"{k}={v}" for k, v in zip(local_keys, combo))
                     for task in tasks:
+                        if task == "decode" and arm == "native":
+                            continue  # native sends the video to Gemini; no local decode
                         base = {"video": Path(video).name, "arm": arm, "decoder": dec,
                                 "task": task, "engine": a.engine}
                         base.update({k: v for k, v in zip(local_keys, combo)})
                         print(f"▶ {task}: {label}")
                         try:
-                            if task == "summarize":
+                            if task == "decode":
+                                _, report, _ = run_decode(cfg)
+                            elif task == "summarize":
                                 _, report, _ = run_summarize(cfg)
                             else:
                                 qs = questions or ["What happens in the video?"]
@@ -131,6 +135,7 @@ def _print_summary(rows: list[dict]):
         from rich.console import Console
         from rich.table import Table
         cols = ["video", "arm", "decoder", "sampling", "task",
+                "decode.wall_s", "counter.frames_decoded_per_sec",
                 "total.wall_s", "total.tokens", "total.cost_usd", "counter.frames_selected"]
         present = [c for c in cols if any(c in r for r in rows)]
         table = Table(title="Benchmark results")
