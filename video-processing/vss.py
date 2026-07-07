@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """vss.py — one-liner CLI for VSS-inspired video summarization + multi-turn Q&A.
 
+  python vss.py decode    --video foo.mp4 --decoder gpu --sampling uniform
   python vss.py summarize --video foo.mp4
   python vss.py qa        --video foo.mp4
   python vss.py qa        --video foo.mp4 --questions qs.txt
@@ -25,7 +26,7 @@ except Exception:
     pass
 
 from src.config import PipelineConfig
-from src.runner import run_summarize, run_qa_batch
+from src.runner import run_decode, run_summarize, run_qa_batch
 from src.pipeline_native import NativePipeline
 from src.pipeline_local import LocalPipeline
 from src.gemini import make_client
@@ -75,6 +76,14 @@ def _check_video(cfg):
 
 
 # --------------------------------------------------------------------------- #
+def cmd_decode(a):
+    cfg = _cfg_from_args(a)
+    _check_video(cfg)
+    _, report, path = run_decode(cfg)
+    print(report.render())
+    print(f"[profile saved: {path}]")
+
+
 def cmd_summarize(a):
     cfg = _cfg_from_args(a)
     _check_video(cfg)
@@ -151,6 +160,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    pd = sub.add_parser("decode", help="frame extraction only — decoder/sampling latency, no API calls")
+    _add_common(pd)
+    pd.set_defaults(func=cmd_decode)
 
     ps = sub.add_parser("summarize", help="summarize a video")
     _add_common(ps)

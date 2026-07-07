@@ -50,6 +50,11 @@ uv run python vss.py summarize --video outputs/test.mp4 --engine mock
 # benchmark: arms × samplers across your clips → CSV
 uv run python vss.py benchmark --videos "outputs/*.mp4" --arms native,local \
     --tasks summarize --grid sampling=uniform,scene chunk_duration=10,20
+
+# decoder-only latency (frame extraction, no API calls / key needed)
+uv run python vss.py decode --video outputs/test.mp4 --decoder gpu --sampling uniform
+uv run python vss.py benchmark --videos "outputs/*.mp4" --arms local \
+    --decoders cpu,gpu --tasks decode --grid sampling=uniform
 ```
 
 ### Key flags
@@ -100,8 +105,9 @@ Two GPU paths, both via **torchcodec NVDEC** (frames decode straight to CUDA
 tensors):
 
 - `--decoder gpu --sampling uniform` — NVDEC decode with the same timestamp
-  math as the CPU path. With identical sampling, `benchmark --decoders cpu,gpu`
-  isolates pure decode speedup.
+  math as the CPU path. With identical sampling, `benchmark --decoders cpu,gpu
+  --tasks decode` isolates pure decode speedup (no API calls; see also the
+  `decode` subcommand for one-off runs).
 - `--decoder gpu --sampling transnet` — the full GPU pipeline: **NVDEC dense
   decode** → 48×27 GPU resize → **TransNetV2** per-frame shot-transition
   probabilities (windows of 100 frames, 25-frame overlap, cut at

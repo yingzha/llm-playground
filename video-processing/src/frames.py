@@ -253,6 +253,13 @@ class FrameExtractor:
         # since selection interleaves with decoding. The separate "frame_select" stage
         # below is dedup + JPEG encode. Sum both for total frame-extraction cost.
         gpu = self.cfg.decoder == "gpu"
+        if gpu:
+            # one-time torch import + CUDA context init, timed separately so the
+            # "decode" stage measures decoding, not library startup
+            with report.stage("gpu_init"):
+                torch, _ = _require_gpu_stack()
+                torch.empty(1, device="cuda")
+                torch.cuda.synchronize()
         with report.stage("decode", gpu=gpu):
             if self.cfg.sampling == "iframe":
                 per_chunk = self._select_iframe(path, ranges, info)

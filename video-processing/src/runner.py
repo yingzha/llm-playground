@@ -16,11 +16,26 @@ def _stamp() -> str:
     return time.strftime("%Y%m%d-%H%M%S")
 
 
-def _save_profile(cfg: PipelineConfig, report: ProfileReport, task: str) -> Path:
+def _save_profile(cfg: PipelineConfig, report: ProfileReport, task: str,
+                  tag: str | None = None) -> Path:
     stem = Path(cfg.video).stem
-    path = cfg.out / "profiles" / f"{stem}__{cfg.arm}_{task}__{_stamp()}.json"
+    path = cfg.out / "profiles" / f"{stem}__{tag or cfg.arm}_{task}__{_stamp()}.json"
     report.save_json(path)
     return path
+
+
+def run_decode(cfg: PipelineConfig):
+    """Frame extraction only (decode -> select -> dedup -> JPEG). No API client,
+    so it isolates decoder/sampling latency — use for cpu-vs-gpu comparisons."""
+    from .frames import FrameExtractor
+
+    report = ProfileReport(
+        label=f"decode · {cfg.decoder}/{cfg.sampling} · {Path(cfg.video).name}")
+    with report.stage("total"):
+        chunks, _ = FrameExtractor(cfg).extract(cfg.video, report)
+    profile_path = _save_profile(cfg, report, "decode",
+                                 tag=f"{cfg.decoder}-{cfg.sampling}")
+    return chunks, report, profile_path
 
 
 def run_summarize(cfg: PipelineConfig):
